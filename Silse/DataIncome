@@ -1,0 +1,71 @@
+import requests
+import pandas as pd
+from urllib.request import urlopen
+from bs4 import BeautifulSoup
+
+local_dic = {"강서구" : 11500, "강남구" : 11680, "강북구" : 11305, "강동구" : 11740} #지역번호
+
+
+
+def collect_lent(ym,lawd_cd):
+
+    Month_Data=[]
+    for i in range(0,32):
+        Month_Data.append([0,0,0])
+    
+    API_KEY = ""
+    url="http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTrade"
+ 
+    # &numOfRows=1000"+
+    url=url+"?&LAWD_CD="+str(lawd_cd)+"&DEAL_YMD="+str(ym)+"&serviceKey="+API_KEY
+ 
+    # webbrowser.open(url)
+    resultXML = urlopen(url)
+    result = resultXML.read()
+    xmlsoup = BeautifulSoup(result, 'lxml-xml')
+ 
+    te=xmlsoup.findAll("item")
+ 
+    sil=pd.DataFrame()
+ 
+    for t in te:
+        build_y=t.find("건축년도").text
+        year=t.find("년").text
+        month=t.find("월").text
+        day=t.find("일").text
+        dong=t.find("법정동").text
+        apt_price=t.find("거래금액").text
+        apt_nm=t.find("아파트").text
+        size=t.find("전용면적").text
+ 
+        try:
+            jibun=t.find("지번").text
+        except:
+            jibun=""
+ 
+        ji_code=t.find("지역코드").text
+        floor=t.find("층").text
+
+        Month_Data[int(day)] = [Month_Data[int(day)][0] + 1, Month_Data[int(day)][1] + int(apt_price.lstrip().replace(",","")), Month_Data[int(day)][2] + float(size.lstrip())]
+ 
+        temp = pd.DataFrame(([[build_y,year,month,day,dong,apt_price,apt_nm,size,jibun,ji_code,floor]]), columns=["build_y","year","month","day","dong","apt_price","apt_nm","size","jibun","ji_code","floor"])
+        
+        sil=pd.concat([sil,temp])
+ 
+    sil=sil.reset_index(drop=True)
+
+    for i in range(31,-1,-1):
+        if Month_Data[i][0] == 0:
+            del Month_Data[i]
+        else:
+            Month_Data[i] = [ym*100 + i, round(Month_Data[i][1]/Month_Data[i][0]/Month_Data[i][2],2)]
+
+    Month_Avr = pd.DataFrame(Month_Data,columns=["Date","apt_price"])
+    Month_Avr.to_csv("Data_Avr.csv", mode='a', header=False)
+    sil.to_csv("Data_file.csv", mode='a', header=False)
+
+    print("Done = " + str(ym))
+
+for i in range(0,10): # 연
+    for j in range(1,13): # 월 
+        collect_lent(201*1000 + i*100 + j,local_dic["강동구"]) #위치
